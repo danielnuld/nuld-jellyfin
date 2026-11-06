@@ -1,7 +1,7 @@
 # ORBIT Jellyfin
 
 Jellyfin player for the PlayStation 2, styled like the [ORBIT launcher](https://github.com/danielnuld/ps2-launcher)
-([website](https://danielnuld.github.io/ps2-launcher/), [download](https://github.com/danielnuld/ps2-launcher/releases/latest)).
+([website](https://danielnuld.github.io/nuld/), [download](https://github.com/danielnuld/nuld/releases/latest)).
 Jellyfin transcodes to MPEG-2 + MP2 at SD resolution; the PS2 decodes the video on the IPU (libmpeg) and the audio
 with libmad + audsrv.
 
