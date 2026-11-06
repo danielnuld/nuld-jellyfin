@@ -1,5 +1,6 @@
 // Jellyfin playback spike (phase 15, go / no-go): can the PS2 play what Jellyfin transcodes for it?
-// - mass0:/orbit/config.ini [jellyfin] servidor / usuario / clave, [red] as the launcher; network via net.c (lwIP)
+// - mass0:/nuld/config.ini (orbit/ until the launcher's v1.1) [jellyfin] servidor / usuario / clave, [red] as the
+//   launcher; network via net.c (lwIP)
 // - the movies of every library are listed; X plays one, from the start (△: from where Jellyfin left it)
 // - stream: jf_stream (MPEG-2 video + MP2 audio in an MPEG program stream, chunked HTTP) -> mpegps.c
 //   video: ring -> IPU through ps2sdk libmpeg (RGBA32 pictures in 16x16 macroblocks) -> gfx_mb32 (DMA to the GS
@@ -953,7 +954,7 @@ int main(void)
 	screen("Jellyfin", L("Cargando módulos...", "Loading modules..."));
 	if (!iop_init()) { screen("Jellyfin", L("Sin USB (mass0:)", "No USB (mass0:)")); SleepThread(); }
 	audsrv_init();
-	ini_load(&cfg, "mass0:/orbit/config.ini");
+	if (!ini_load(&cfg, "mass0:/nuld/config.ini")) ini_load(&cfg, "mass0:/orbit/config.ini"); // the launcher's; orbit/ until v1.1
 	lang_en = !strcasecmp(ini_get(&cfg, "ui", "idioma", "es"), "en"); // the launcher's [ui] idioma (phase 18)
 	logf_("jfplay: start\n");
 	screen("Jellyfin", L("Conectando a la red...", "Connecting to the network..."));

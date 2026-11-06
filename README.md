@@ -17,7 +17,7 @@ wsl bash build.sh test     # host selftests; JF_CHECK="http://server:8096 user p
 Copy `jfplay.elf` and `title.cfg` to `mass0:/APPS/Jellyfin/`: the launcher lists it under APPS. It also runs on its
 own from uLaunchELF.
 
-Settings are read from the launcher's `mass0:/orbit/config.ini`:
+Settings are read from the launcher's `mass0:/nuld/config.ini` (`mass0:/orbit/` with launchers up to v1.1):
 
 ```
 [red]
