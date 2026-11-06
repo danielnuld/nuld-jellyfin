@@ -116,7 +116,7 @@ int main(void)
 	assert(gfx_text_width(f, "AB") == f->g['A' - 32].adv + f->g['B' - 32].adv + 4); // between glyphs only
 	tracking = 0;
 	assert(gfx_text_width(f, "t\xC3\xA9") == f->g['t' - 32].adv + f->g[96].adv && f->g[96].w > 0); // é baked
-	assert(gfx_font_logo.g['O' - 32].w > 0 && gfx_font_logo.g['A' - 32].w == 0); // logo: "ORBIT" only
+	assert(gfx_font_logo.g['N' - 32].w > 0 && gfx_font_logo.g['A' - 32].w == 0); // logo: "NULD" only
 	s = "\xC3\xA8\xC5\x93";                              // e-grave, oe: the ui font bakes both
 	int eg = next_glyph(f, &s), oe = next_glyph(f, &s);
 	assert(eg >= 95 && oe >= 95 && f->g[eg].w > 0 && f->g[oe].w > 0 && !*s);
@@ -392,6 +392,52 @@ void gfx_ribbon(const float *px, const float *py, int n, float width, unsigned r
 			rgba_a(rgb, 0); xyz16((int)((px[i] + nx * h) * 16), (int)((py[i] + ny * h) * 16));
 		}
 	}
+}
+
+// solid thick polyline (current alpha) under a gfx_ribbon 3 px wider: crisp letters with a 1-2 px soft edge
+void gfx_stroke(const float *px, const float *py, int n, float width, unsigned rgb)
+{
+	if (n < 2 || !room(2 + 2 * n)) return;
+	prim(GS_PRIM_TRIANGLE_STRIP, 0, 0, alpha < 0x80, 0);
+	rgba(rgb);
+	for (int i = 0; i < n; i++) {
+		int i0 = i ? i - 1 : 0, i1 = i < n - 1 ? i + 1 : n - 1;
+		float tx = px[i1] - px[i0], ty = py[i1] - py[i0], l = sqrtf(tx * tx + ty * ty);
+		float nx = l > 0 ? -ty / l * width / 2 : 0, ny = l > 0 ? tx / l * width / 2 : 0;
+		xyz16((int)((px[i] + nx) * 16), (int)((py[i] + ny) * 16));
+		xyz16((int)((px[i] - nx) * 16), (int)((py[i] - ny) * 16));
+	}
+	gfx_ribbon(px, py, n, width + 3, rgb, alpha);
+}
+
+// a vector glyph (tools/logo.py): its triangles filled flat, then its contours again as AA1 line strips, which
+// blend the edges by coverage. v: x y pairs in font units, y up; on screen (ox + x * s, oy - y * s)
+void gfx_vmesh(const short *v, int nv, const unsigned short *tri, int ntri, const unsigned short *ctr, int nctr,
+               float ox, float oy, float s, unsigned rgb)
+{
+	if (!room(2 + 3 * ntri)) return;
+	prim(GS_PRIM_TRIANGLE, 0, 0, alpha < 0x80, 0);
+	rgba(rgb);
+	for (int i = 0; i < 3 * ntri; i++)
+		xyz16((int)((ox + v[2 * tri[i]] * s) * 16), (int)((oy - v[2 * tri[i] + 1] * s) * 16));
+	for (int c = 0; c < nctr; c++) {
+		int a = ctr[c], b = c + 1 < nctr ? ctr[c + 1] : nv;
+		if (!room(3 + b - a)) return;
+		prim(GS_PRIM_LINE_STRIP, 0, 0, 1, 1);
+		rgba(rgb);
+		for (int k = a; k <= b; k++) {
+			int j = k < b ? k : a; // closed: back to the first point
+			xyz16((int)((ox + v[2 * j] * s) * 16), (int)((oy - v[2 * j + 1] * s) * 16));
+		}
+	}
+}
+
+void gfx_scissor(int x0, int y0, int x1, int y1)
+{
+	if (!room(1)) return;
+	x0 = x0 < 0 ? 0 : x0, y0 = y0 < 0 ? 0 : y0; // a box partly off screen: the register takes no negatives
+	x1 = x1 > GFX_W - 1 ? GFX_W - 1 : x1, y1 = y1 > GFX_H - 1 ? GFX_H - 1 : y1;
+	PACK_GIFTAG(q, GS_SET_SCISSOR(x0, x1, y0, y1), GS_REG_SCISSOR); q++;
 }
 
 // textured quad, screen rect in 1/16 px, texels (u, v)-(u2, v2) in 1/16, colour top -> bottom (true RGB), blended

@@ -35,12 +35,18 @@
 #include "mpegps.h"
 #include "cover.h"
 #include "ui_data.h"
+#include "splash.h"
 #include <math.h>
 
-#define TEXT 0xEEF3FF
-#define TEXT2 0xA9B6D3
-#define LABEL 0x8FA0C4
-#define ICE 0x7FE7FF
+// the NULD palette (splash.h): black, steel, mist, signal and one acid accent
+#define BG NULD_BG
+#define PANEL 0x0C0E12
+#define ROW 0x161A21
+#define EDGE 0x2A303A
+#define TEXT NULD_FG
+#define TEXT2 0xA9B0BA
+#define LABEL NULD_MUTED
+#define ACID NULD_ACID
 #define LOG "mass0:/jfplay.txt"
 int lang_en; // lang.h
 #define VBR 3000000 // bits/s asked of Jellyfin; ~2.9 Mbit/s measured with the test movie (docs/phase15-results.md)
@@ -411,36 +417,37 @@ static void sub_next(void) // □: the next track that has cues, then off
 
 // ---- player bar: title, time, progress and the buttons, as the launcher's footer. Shown while paused or loading,
 // and for 3 s after a key ----
-#define CHROME_T 0xF4F8FF
-#define CHROME_B 0xAAB7D2
-#define IRIS 0xC08BFF
-#define INK 0x0A1026
 static const char *hud_title;
 static int hud_ms, hud_len_ms, paused, loading, pic_w, pic_h; // pic_w / pic_h: the last picture shown (0: none yet)
 static clock_t hud_until;
 static void hud_show(void) { hud_until = clock() + 3 * CLOCKS_PER_SEC; }
 
-// a button hint pill, right-aligned at x (launcher.c hint(), with y; action_icon -1 = none). Returns the next x
-static int hint(int x, int y, int key_icon, const char *key_text, int action_icon, const char *label)
+static void frame1(int x, int y, int w, int h, unsigned rgb) // 1 px outline
+{
+	gfx_rect(x, y, w, 1, rgb), gfx_rect(x, y + h - 1, w, 1, rgb), gfx_rect(x, y, 1, h, rgb), gfx_rect(x + w - 1, y, 1, h, rgb);
+}
+
+// a button hint, right-aligned at x (the launcher's): the button as a ring with its symbol in acid, or its name
+// (L1, R1) in a 1 px frame, then the label. Returns the next x
+static int hint(int x, int y, int key_icon, const char *key_text, const char *label)
 {
 	int lw = gfx_text_width(&gfx_font_ui, label);
-	int kw = key_icon >= 0 ? 30 : gfx_text_width(&gfx_font_mono, key_text) + 20, aw = action_icon >= 0 ? 28 : 0;
-	int w = 8 + kw + 10 + aw + lw + 18, x0 = x - w;
-	gfx_alpha(0x2D);
-	gfx_rrect(x0, y, w, 44, 22, TEXT2, TEXT2);
 	gfx_alpha(0x80);
-	gfx_rrect(x0 + 1, y + 1, w - 2, 42, 21, 0x0B1430, 0x0A1128);
-	int kx = x0 + 8;
+	gfx_text(&gfx_font_ui, x - lw, y + 3, label, TEXT);
+	x -= lw + 10;
 	if (key_icon >= 0) {
-		gfx_rrect(kx, y + 7, 30, 30, 15, CHROME_T, CHROME_B);
-		gfx_icon(key_icon, kx + 8, y + 15, IRIS);
+		float rx[34], ry[34], cx = x - 13, cy = y + 13;
+		for (int i = 0; i < 34; i++) rx[i] = cx + 12 * cosf(i * 6.2832f / 32), ry[i] = cy + 12 * sinf(i * 6.2832f / 32);
+		gfx_stroke(rx, ry, 34, 1.2f, LABEL);
+		gfx_icon(key_icon, (int)cx - 7, (int)cy - 7, ACID);
+		x -= 26;
 	} else {
-		gfx_rrect(kx, y + 9, kw, 26, 13, CHROME_T, CHROME_B);
-		gfx_text(&gfx_font_mono, kx + 10, y + 12, key_text, INK);
+		int kw = gfx_text_width(&gfx_font_mono, key_text) + 16;
+		frame1(x - kw, y + 1, kw, 24, LABEL);
+		gfx_text(&gfx_font_mono, x - kw + 8, y + 5, key_text, ACID);
+		x -= kw;
 	}
-	if (aw) gfx_icon(action_icon, kx + kw + 10, y + 13, ICE);
-	gfx_text(&gfx_font_ui, kx + kw + 10 + aw, y + 11, label, TEXT);
-	return x0 - 12;
+	return x - 28;
 }
 
 static void clock_str(char *o, int n, int ms) // h:mm:ss or m:ss
@@ -453,8 +460,8 @@ static void clock_str(char *o, int n, int ms) // h:mm:ss or m:ss
 static void draw_hud(void)
 {
 	char a[24], b[24], t[64];
-	gfx_alpha(0x58);
-	gfx_rect(0, 548, GFX_W, GFX_H - 548, 0x04060E);
+	gfx_alpha(0x60);
+	gfx_rect(0, 548, GFX_W, GFX_H - 548, BG);
 	gfx_alpha(0x80);
 	snprintf(t, sizeof(t), "%.63s", hud_title ? hud_title : "");
 	gfx_text(&gfx_font_ui, 64, 562, t, TEXT);
@@ -462,25 +469,24 @@ static void draw_hud(void)
 	char tm[56];
 	snprintf(tm, sizeof(tm), hud_len_ms > 0 ? "%s / %s" : "%s", a, b);
 	gfx_text(&gfx_font_mono, GFX_W - 64 - gfx_text_width(&gfx_font_mono, tm), 562, tm, TEXT2);
-	gfx_rect(64, 600, GFX_W - 128, 4, 0x3A4570);
+	gfx_rect(64, 601, GFX_W - 128, 2, EDGE);
 	if (hud_len_ms > 0) {
 		int f = (int)((long long)(GFX_W - 128) * (hud_ms < 0 ? 0 : hud_ms > hud_len_ms ? hud_len_ms : hud_ms) / hud_len_ms);
-		gfx_rect(64, 600, f, 4, ICE);
-		gfx_rrect(64 + f - 7, 595, 14, 14, 7, CHROME_T, CHROME_B);
+		gfx_rect(64, 601, f, 2, ACID);
+		gfx_rect(64 + f - 1, 594, 3, 16, TEXT); // the play head
 	}
-	int x = hint(GFX_W - 64, 636, UI_CIRCLE_14, NULL, -1, L("Salir", "Exit"));
-	if (ntracks) x = hint(x, 636, UI_SQUARE_14, NULL, -1, L("Subtítulos", "Subtitles"));
-	x = hint(x, 636, -1, "R1", -1, "+30 s");
-	x = hint(x, 636, -1, "L1", -1, "-10 s");
-	hint(x, 636, UI_CROSS_14, NULL, paused ? UI_PLAY_18 : -1, paused ? L("Seguir", "Resume") : L("Pausa", "Pause"));
-	if (paused || loading) { // a chrome-edged pill, top centre (the launcher's view label)
+	int x = hint(GFX_W - 64, 636, UI_CIRCLE_14, NULL, L("Salir", "Exit"));
+	if (ntracks) x = hint(x, 636, UI_SQUARE_14, NULL, L("Subtítulos", "Subtitles"));
+	x = hint(x, 636, -1, "R1", "+30 s");
+	x = hint(x, 636, -1, "L1", "-10 s");
+	hint(x, 636, UI_CROSS_14, NULL, paused ? L("Seguir", "Resume") : L("Pausa", "Pause"));
+	if (paused || loading) { // an acid-framed tag, top centre (the launcher's view label)
 		const char *s = paused ? L("EN PAUSA", "PAUSED") : L("CARGANDO", "LOADING");
 		gfx_tracking(3);
 		int w = gfx_text_width(&gfx_font_mono, s) + 40, px = (GFX_W - w) / 2;
-		gfx_alpha(0x40);
-		gfx_rrect(px - 1, 39, w + 2, 38, 19, ICE, IRIS);
 		gfx_alpha(0x80);
-		gfx_rrect(px, 40, w, 36, 18, 0x1B2850, 0x0D1530);
+		gfx_rect(px, 40, w, 36, PANEL);
+		frame1(px, 40, w, 36, ACID);
 		gfx_text(&gfx_font_mono, px + 20, 50, s, TEXT);
 		gfx_tracking(0);
 	}
@@ -497,7 +503,7 @@ static void draw_lines(const char *text, int bottom) // centred, a dark band beh
 		snprintf(line, sizeof(line), "%.*s", n < 199 ? n : 199, p);
 		int w = gfx_text_width(&gfx_font_ui, line), x = (GFX_W - w) / 2;
 		gfx_alpha(0x50);
-		gfx_rrect(x - 14, y - 4, w + 28, lh - 2, 8, 0, 0);
+		gfx_rect(x - 14, y - 4, w + 28, lh - 2, 0);
 		gfx_alpha(0x80);
 		gfx_text(&gfx_font_ui, x + 1, y + 1, line, 0); // shadow
 		gfx_text(&gfx_font_ui, x, y, line, 0xFFFFFF);
@@ -507,6 +513,7 @@ static void draw_lines(const char *text, int bottom) // centred, a dark band beh
 
 static void draw_picture(int w, int h, const char *osd, const char *sub)
 {
+	splash_stop(); // the playback draws for itself
 	gfx_begin();
 	gfx_alpha(0x80);
 	gfx_rect(0, 0, GFX_W, GFX_H, 0);
@@ -527,23 +534,20 @@ static void draw_picture(int w, int h, const char *osd, const char *sub)
 	if (clock() < toast_until) { // track changes
 		int tw = gfx_text_width(&gfx_font_ui, toast);
 		gfx_alpha(0x60);
-		gfx_rrect(GFX_W - 64 - tw - 32, 40, tw + 32, 40, 20, 0, 0);
+		gfx_rect(GFX_W - 64 - tw - 32, 40, tw + 32, 40, BG);
 		gfx_alpha(0x80);
-		gfx_text(&gfx_font_ui, GFX_W - 64 - tw - 16, 48, toast, ICE);
+		gfx_text(&gfx_font_ui, GFX_W - 64 - tw - 16, 48, toast, ACID);
 	}
 	gfx_end();
 	gfx_flip();
 }
 
-static void screen(const char *title, const char *body)
-{
-	gfx_begin();
-	gfx_alpha(0x80);
-	gfx_rect(0, 0, GFX_W, GFX_H, 0x04060E);
-	gfx_text(&gfx_font_title, 64, 48, title, TEXT);
-	gfx_text(&gfx_font_mono, 64, 120, body, TEXT2);
-	gfx_end();
-	gfx_flip();
+static void screen(const char *title, const char *body) // the NULD loading screen (splash.c) until the next picture
+{                                                       // or list draws; title (a film's name) or NULL above body
+	char m[256];
+	snprintf(m, sizeof(m), title ? "%.80s\n%s" : "%.0s%s", title ? title : "", body);
+	splash_msg(m);
+	splash_start();
 }
 
 static unsigned pressed(void)
@@ -689,10 +693,6 @@ static long long play(jf_conn *c, const jf_item *it, long long start, int *act)
 // thread that only runs while the render thread sleeps on the vsync, and never during playback ----
 #define MAXI 200
 #define POSTERS 14          // pairs kept (big 256x368 + small 184x264 CT16 = 282 KB each): about 4 MB
-#define NAVY 0x0D1736
-#define NIGHT 0x04060E
-#define IRIS 0xC08BFF
-#define INK 0x0A1026
 static jf_conn conn;
 static jf_item lib[16], items[MAXI], eps[128];
 static int nlib, cur_lib, nitems, sel, neps = -1, ep_sel; // neps >= 0: the episode panel is open
@@ -780,63 +780,71 @@ static void wrap(const gfx_font *f, int x, int y, int w, int lines, const char *
 	}
 }
 
-static int chip(int x, int y, const char *txt, unsigned fill_t, unsigned fill_b, unsigned ink) // a pill; returns its end
+// a fact as a tag (the launcher's header tags): a 1 px frame, or solid with black text; returns its end
+static int chip(int x, int y, const char *txt, unsigned edge, unsigned ink, int filled)
 {
-	int w = gfx_text_width(&gfx_font_ui, txt) + 24;
-	gfx_rrect(x, y, w, 28, 14, fill_t, fill_b);
-	gfx_text(&gfx_font_ui, x + 12, y + 3, txt, ink);
+	int w = gfx_text_width(&gfx_font_mono, txt) + 24;
+	if (filled) gfx_rect(x, y, w, 28, edge), ink = BG;
+	else frame1(x, y, w, 28, edge);
+	gfx_text(&gfx_font_mono, x + 12, y + 6, txt, ink);
 	return x + w + 10;
 }
 
-static void poster(int i, int x, int y, int big) // the poster, or a drawn card with the title while it loads
+static void poster(int i, int x, int y, int big) // the poster, or a hatched card with the title while it loads
 {
 	int w = big ? COVER_W : COVER_SW, h = big ? COVER_H : COVER_SH;
 	if (pstate[i] == 2) gfx_image(big ? pbig[i] : psmall[i], w, h, x, y, w, h);
 	else {
 		char t[64];
-		gfx_rrect(x, y, w, h, 10, 0x1B2850, 0x0D1530);
+		gfx_alpha(0x80), gfx_rect(x, y, w, h, 0x11141A);
+		gfx_scissor(x, y, x + w - 1, y + h - 1);
+		for (int d = -h; d < w; d += 12) gfx_line(x + d, y + h, x + d + h, y, TEXT, 0x10, 0x10);
+		gfx_scissor(0, 0, GFX_W - 1, GFX_H - 1);
+		gfx_alpha(0x80);
 		snprintf(t, sizeof(t), "%.63s", items[i].name);
-		wrap(&gfx_font_ui, x + 14, y + h - 70, w - 28, 2, t, TEXT2);
+		wrap(&gfx_font_ui, x + 14, y + h - 70, w - 28, 2, t, TEXT);
 	}
+	frame1(x, y, w, h, big ? 0x3A4150 : 0x232833);
 	if (items[i].resume > 0 && items[i].ticks > 0) { // how far you got
-		gfx_rect(x + 8, y + h - 10, w - 16, 4, 0x3A4570);
-		gfx_rect(x + 8, y + h - 10, (int)((w - 16) * items[i].resume / items[i].ticks), 4, ICE);
+		gfx_rect(x + 8, y + h - 10, w - 16, 3, EDGE);
+		gfx_rect(x + 8, y + h - 10, (int)((w - 16) * items[i].resume / items[i].ticks), 3, ACID);
 	}
 }
 
 static void draw_browse(float s)
 {
 	char a[160];
+	static int fr; // frames: the floor flows
+	splash_stop(); // the list draws for itself
 	gfx_begin();
-	gfx_alpha(0x80);
-	gfx_dither(1); // soft gradient: dithered (CT16 bands otherwise)
-	gfx_grad(0, 0, GFX_W, GFX_H, NAVY, NIGHT, 1);
-	gfx_dither(0);
-	gfx_orb(64, 40, 56);
-	int tx = 140; // library tabs
+	splash_floor(fr++ / 120.f, TEXT, 0x12); // black, a faint floor (the launcher's home)
+	splash_mark(81, 56, 17);
+	splash_vtext(&vfont_michroma, 112, 64, 15, 0.06f, "NULD", TEXT); // Michroma 20 px: 15 px caps
+	int tx = 236; // library tabs
 	for (int l = 0; l < nlib; l++) {
 		gfx_tracking(2);
 		snprintf(a, sizeof(a), "%.95s", lib[l].name);
 		for (unsigned char *p = (unsigned char *)a; *p; p++)
 			if (*p >= 'a' && *p <= 'z') *p -= 32;
 			else if (p[0] == 0xC3 && p[1] >= 0xA0 && p[1] <= 0xBE && p[1] != 0xB7) p[1] -= 0x20, p++; // á é í ó ú ñ ü...
-		gfx_text(&gfx_font_mono, tx, 52, a, l == cur_lib ? ICE : LABEL);
+		gfx_text(&gfx_font_mono, tx, 49, a, l == cur_lib ? ACID : LABEL);
 		int w = gfx_text_width(&gfx_font_mono, a);
-		if (l == cur_lib) gfx_rect(tx, 74, w, 2, ICE);
+		if (l == cur_lib) gfx_rect(tx, 71, w, 2, ACID);
 		gfx_tracking(0);
 		tx += w + 36;
 	}
-	if (nlib > 1) hint(GFX_W - 64, 34, -1, "L1 R1", -1, L("Biblioteca", "Library"));
+	if (nlib > 1) hint(GFX_W - 64, 40, -1, "L1 R1", L("Biblioteca", "Library"));
 	if (!nitems) {
-		gfx_text(&gfx_font_ui, 140, 300, L("Esta biblioteca está vacía", "This library is empty"), TEXT2);
+		gfx_text(&gfx_font_ui, 64, 300, L("Esta biblioteca está vacía", "This library is empty"), TEXT2);
+		splash_scan();
 		gfx_end(), gfx_flip();
 		return;
 	}
 	jf_item *it = &items[sel];
 	gfx_text(&gfx_font_title, 64, 98, it->name, TEXT); // title, then the facts row
 	int x = 64, y = 150;
-	if (*it->rating) x = chip(x, y, it->rating, 0xF4F8FF, 0xAAB7D2, INK);
-	if (it->score) snprintf(a, sizeof(a), "%d.%d / 10", it->score / 10, it->score % 10), x = chip(x, y, a, 0x2A2060, 0x1E1746, TEXT);
+	if (*it->rating) x = chip(x, y, it->rating, TEXT, BG, 1);
+	if (it->score) snprintf(a, sizeof(a), "%d.%d / 10", it->score / 10, it->score % 10), x = chip(x, y, a, ACID, ACID, 0);
 	a[0] = 0;
 	if (it->year) snprintf(a, sizeof(a), "%d", it->year);
 	if (it->ticks > 0) snprintf(a + strlen(a), sizeof(a) - strlen(a), "%s%lld min", *a ? "   " : "",
@@ -851,45 +859,52 @@ static void draw_browse(float s)
 		int big = i == sel && fabsf(d) < 0.5f;
 		int px = 64 + (d <= 0 ? (int)(d * (COVER_SW + 24)) : COVER_W + 32 + (int)((d - 1) * (COVER_SW + 24)));
 		if (px > GFX_W || px + COVER_W < 0) continue;
-		poster(i, px, big ? py : py + (COVER_H - COVER_SH) / 2, big);
-		if (big) gfx_rrect(px - 4, py - 4, COVER_W + 8, 3, 1, ICE, ICE);
+		poster(i, px, big ? py : py + COVER_H - COVER_SH, big); // bottoms aligned
+		if (big) gfx_alpha(0x80), splash_hud(px - 12, py - 12, COVER_W + 24, COVER_H + 24, 30);
 	}
-	if (*it->overview) wrap(&gfx_font_ui, 64, 606, GFX_W - 128, 2, it->overview, TEXT2);
+	if (*it->overview) wrap(&gfx_font_ui, 64, 624, GFX_W - 128, 1, it->overview, TEXT2); // under the selection's corners
 	snprintf(a, sizeof(a), "%02d / %02d", sel + 1, nitems);
-	gfx_text(&gfx_font_mono, 64, 664, a, LABEL);
-	if (!strcmp(it->type, "Series")) hint(GFX_W - 64, 652, UI_CROSS_14, NULL, UI_LIST_18, "Episodios");
+	gfx_tracking(2);
+	gfx_text(&gfx_font_mono, 64, 668, a, LABEL);
+	gfx_tracking(0);
+	if (!strcmp(it->type, "Series")) hint(GFX_W - 64, 652, UI_CROSS_14, NULL, L("Episodios", "Episodes"));
 	else {
 		int x = GFX_W - 64;
-		if (it->resume) x = hint(x, 652, UI_TRIANGLE_14, NULL, UI_PLAY_18, L("Continuar", "Continue"));
-		hint(x, 652, UI_CROSS_14, NULL, UI_PLAY_18, L("Reproducir", "Play"));
+		if (it->resume) x = hint(x, 652, UI_TRIANGLE_14, NULL, L("Continuar", "Continue"));
+		hint(x, 652, UI_CROSS_14, NULL, L("Reproducir", "Play"));
 	}
 	if (neps >= 0) { // episode panel over the browse screen
 		int pw = 760, ph = 520, px = (GFX_W - pw) / 2, pyy = 110;
 		gfx_alpha(0x60);
-		gfx_rect(0, 0, GFX_W, GFX_H, NIGHT);
+		gfx_rect(0, 0, GFX_W, GFX_H, BG);
 		gfx_alpha(0x80);
-		gfx_rrect(px, pyy, pw, ph, 18, 0x16224A, 0x0A1128);
+		gfx_rect(px, pyy, pw, ph, PANEL);
+		frame1(px, pyy, pw, ph, EDGE);
+		splash_hud(px - 6, pyy - 6, pw + 12, ph + 12, 22);
+		gfx_alpha(0x80);
 		gfx_text(&gfx_font_ui, px + 28, pyy + 20, it->name, TEXT);
+		gfx_rect(px + 24, pyy + 56, pw - 48, 1, EDGE);
 		if (!neps) gfx_text(&gfx_font_ui, px + 28, pyy + 80, L("Sin episodios", "No episodes"), TEXT2);
 		int top = ep_sel > 5 ? ep_sel - 5 : 0;
 		for (int e = top; e < neps && e < top + 8; e++) {
 			int ey = pyy + 70 + (e - top) * 44;
-			if (e == ep_sel) gfx_alpha(0x28), gfx_rrect(px + 12, ey - 6, pw - 24, 40, 20, ICE, ICE), gfx_alpha(0x80);
+			if (e == ep_sel) gfx_rect(px + 12, ey - 6, pw - 24, 40, ROW), gfx_rect(px + 12, ey - 6, 3, 40, ACID);
 			if (eps[e].episode) snprintf(a, sizeof(a), "T%d · E%02d", eps[e].season, eps[e].episode);
 			else snprintf(a, sizeof(a), "T%d", eps[e].season); // no number in the server's metadata
-			gfx_text(&gfx_font_mono, px + 28, ey + 2, a, e == ep_sel ? ICE : LABEL);
+			gfx_text(&gfx_font_mono, px + 28, ey + 2, a, e == ep_sel ? ACID : LABEL);
 			snprintf(a, sizeof(a), "%.60s", eps[e].name);
 			gfx_text(&gfx_font_ui, px + 150, ey, a, e == ep_sel ? TEXT : TEXT2);
 			snprintf(a, sizeof(a), "%lld min", eps[e].ticks < 600000000 ? 1 : (eps[e].ticks + 300000000) / 600000000);
 			gfx_text(&gfx_font_mono, px + pw - 28 - gfx_text_width(&gfx_font_mono, a), ey + 2, a, LABEL);
-			if (eps[e].resume > 0 && eps[e].ticks > 0) gfx_rect(px + 150, ey + 30, (int)(300 * eps[e].resume / eps[e].ticks), 3, ICE);
+			if (eps[e].resume > 0 && eps[e].ticks > 0) gfx_rect(px + 150, ey + 30, (int)(300 * eps[e].resume / eps[e].ticks), 3, ACID);
 		}
-		int x = hint(px + pw - 20, pyy + ph - 62, UI_CIRCLE_14, NULL, -1, L("Cerrar", "Close"));
+		int x = hint(px + pw - 28, pyy + ph - 52, UI_CIRCLE_14, NULL, L("Cerrar", "Close"));
 		if (neps > 0) {
-			if (eps[ep_sel].resume) x = hint(x, pyy + ph - 62, UI_TRIANGLE_14, NULL, UI_PLAY_18, L("Continuar", "Continue"));
-			hint(x, pyy + ph - 62, UI_CROSS_14, NULL, UI_PLAY_18, L("Reproducir", "Play"));
+			if (eps[ep_sel].resume) x = hint(x, pyy + ph - 52, UI_TRIANGLE_14, NULL, L("Continuar", "Continue"));
+			hint(x, pyy + ph - 52, UI_CROSS_14, NULL, L("Reproducir", "Play"));
 		}
 	}
+	splash_scan();
 	gfx_end();
 	gfx_flip();
 }
@@ -951,27 +966,27 @@ int main(void)
 	// (0x56-0x59, ps2sdk lwipopts.h / netman) must preempt the decode + conversion, which only this thread does
 	ChangeThreadPriority(GetThreadId(), 0x60);
 	if (!gfx_init()) printf("gfx_init: VRAM pool too small\n");
-	screen("Jellyfin", L("Cargando módulos...", "Loading modules..."));
-	if (!iop_init()) { screen("Jellyfin", L("Sin USB (mass0:)", "No USB (mass0:)")); SleepThread(); }
+	screen(NULL, L("Cargando módulos...", "Loading modules..."));
+	if (!iop_init()) { screen(NULL, L("Sin USB (mass0:)", "No USB (mass0:)")); SleepThread(); }
 	audsrv_init();
 	if (!ini_load(&cfg, "mass0:/nuld/config.ini")) ini_load(&cfg, "mass0:/orbit/config.ini"); // the launcher's; orbit/ until v1.1
 	lang_en = !strcasecmp(ini_get(&cfg, "ui", "idioma", "es"), "en"); // the launcher's [ui] idioma (phase 18)
 	logf_("jfplay: start\n");
-	screen("Jellyfin", L("Conectando a la red...", "Connecting to the network..."));
+	screen(NULL, L("Conectando a la red...", "Connecting to the network..."));
 	int r = net_up(ini_get(&cfg, "red", "ip", "dhcp"), ini_get(&cfg, "red", "mascara", "255.255.255.0"),
 	               ini_get(&cfg, "red", "puerta", ""), ini_get(&cfg, "red", "dns", ""));
-	if (r < 0) { snprintf(msg, sizeof(msg), L("Error de red %d (cable, DHCP o [red] de config.ini)", "Network error %d (cable, DHCP or [red] in config.ini)"), r); logf_("%s\n", msg); screen("Jellyfin", msg); SleepThread(); }
+	if (r < 0) { snprintf(msg, sizeof(msg), L("Error de red %d (cable, DHCP o [red] de config.ini)", "Network error %d (cable, DHCP or [red] in config.ini)"), r); logf_("%s\n", msg); screen(NULL, msg); SleepThread(); }
 	jf_conn c;
 	const char *url = ini_get(&cfg, "jellyfin", "servidor", "");
 	snprintf(sub_pref, sizeof(sub_pref), "%s", ini_get(&cfg, "jellyfin", "subtitulos", "spa"));
-	screen("Jellyfin", url);
+	screen(NULL, url);
 	r = jf_login(&c, url, ini_get(&cfg, "jellyfin", "usuario", ""), ini_get(&cfg, "jellyfin", "clave", ""));
 	logf_("jfplay: mtu %d, login %s: %d (%s)\n", net_mtu, url, r, jf_login_why);
 	if (r < 0) {
 		snprintf(msg, sizeof(msg), L("No se pudo entrar a %s (%d)\nRevisa [jellyfin] servidor, usuario y clave en config.ini",
 		           "Could not sign in to %s (%d)\nCheck [jellyfin] servidor, usuario and clave in config.ini"),
 		         *url ? url : L("(sin servidor)", "(no server)"), r);
-		screen("Jellyfin", msg);
+		screen(NULL, msg);
 		SleepThread();
 	}
 	conn = c;

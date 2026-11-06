@@ -9,7 +9,7 @@
 typedef struct { unsigned long long tex0; } gfx_tex;
 typedef struct { unsigned short u, v; unsigned char w, h; signed char xo, yo; unsigned char adv; } gfx_glyph;
 typedef struct { const gfx_glyph *g; int line_h, asc; } gfx_font;
-// Unbounded 700 38 px, Sora 500 17 px, Space Mono 14 px, Unbounded 800 60 px ("ORBIT" only) — font_data.c
+// Archivo 700 at 125 % 38 px, Archivo 500 17 px, IBM Plex Mono 14 px, Michroma 60 px ("NULD" only) — font_data.c
 extern const gfx_font gfx_font_title, gfx_font_ui, gfx_font_mono, gfx_font_logo;
 
 int gfx_init(void); // video mode, black screen, atlases, vsync semaphore; returns 0 if VRAM could not hold them
@@ -25,6 +25,11 @@ void gfx_grad(int x, int y, int w, int h, unsigned a, unsigned b, int vertical);
 void gfx_rrect(int x, int y, int w, int h, int r, unsigned top, unsigned bottom); // rounded rect; pill: r = h / 2
 void gfx_line(float x0, float y0, float x1, float y1, unsigned rgb, int a0, int a1); // anti-aliased, alpha a0 -> a1
 void gfx_ribbon(const float *px, const float *py, int n, float width, unsigned rgb, int a); // soft thick polyline
+void gfx_stroke(const float *px, const float *py, int n, float width, unsigned rgb); // solid thick polyline, soft edge
+void gfx_scissor(int x0, int y0, int x1, int y1); // draw only inside this rectangle (inclusive) until the next call
+// vector glyph (logo_data.c): triangles + contours (AA edges), font units y up, at (ox + x * s, oy - y * s)
+void gfx_vmesh(const short *v, int nv, const unsigned short *tri, int ntri, const unsigned short *ctr, int nctr,
+               float ox, float oy, float s, unsigned rgb);
 // UI atlas entry (ui_data.h UI_*) at native size, or stretched to w x h with a vertical gradient (glows, sparkles)
 void gfx_icon(int id, int x, int y, unsigned rgb);
 void gfx_icon_scaled(int id, int x, int y, int w, int h, unsigned top, unsigned bottom);

@@ -2,7 +2,7 @@
 # make test  -> host selftests (add JF_CHECK="http://server:8096 user password" for the live checks)
 EE_BIN = jfplay.elf
 IRX_FILES = iomanX fileXio sio2man mcman mcserv freepad libsd audsrv bdm bdmfs_fatfs usbd_mini usbmass_bd_mini ps2dev9 netman smap
-EE_OBJS = jfplay.o iop.o gfx.o font_data.o ui_data.o ini.o net.o jellyfin.o mpegps.o cover.o $(IRX_FILES:=_irx.o)
+EE_OBJS = jfplay.o splash.o logo_data.o iop.o gfx.o font_data.o ui_data.o ini.o net.o jellyfin.o mpegps.o cover.o $(IRX_FILES:=_irx.o)
 EE_LIBS = -L$(PS2SDK)/ports/lib -lwolfssl -ljpeg -lnetman -lps2ip -Xlinker --wrap=open -Xlinker --wrap=read -lmpeg -lmad \
 	-laudsrv -lcdvd -lmc -lfont -lpacket -ldma -lgraph -ldraw -lpad -lfileXio -lpatches -lc
 EE_INCS += -I$(PS2SDK)/ports/include # wolfssl, jpeglib, libmad (ps2sdk ports)
