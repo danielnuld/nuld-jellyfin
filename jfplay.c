@@ -142,6 +142,10 @@ static volatile int a_rate = 48000, a_on;
 static volatile long long a_played;
 static volatile clock_t a_when;
 static volatile int a_queued, a_done; // a_done: the audio thread has left (no audsrv call in flight)
+// audsrv_queued() reads 0 when audsrv's ring is exactly full (found in link.elf, 2026-11-03), and the audio thread
+// keeps it full: the clock jumped ~100 ms ahead every time, and pictures came out late or were dropped. So the queue
+// is the ring's size, measured empty after audsrv_set_format, minus audsrv_available()
+static int a_ring;
 static u8 audio_stack[0x10000] __attribute__((aligned(16)));
 static s16 clamp16(mad_fixed_t s)
 {
@@ -180,6 +184,7 @@ static void audio_thread(void *arg)
 				a_rate = sy.pcm.samplerate;
 				a_on = audsrv_set_format(&f) == 0;
 				audsrv_set_volume(MAX_VOLUME);
+				a_ring = audsrv_available(); // empty now: the whole ring
 			}
 			for (int i = 0; i < sy.pcm.length; i++)
 				pcm[2 * i] = clamp16(sy.pcm.samples[0][i]), pcm[2 * i + 1] = clamp16(sy.pcm.samples[sy.pcm.channels > 1][i]);
@@ -188,7 +193,8 @@ static void audio_thread(void *arg)
 			audio_at = 3;
 			audsrv_play_audio((char *)pcm, sy.pcm.length * 4);
 			a_sent += sy.pcm.length;
-			a_queued = audsrv_queued();
+			int q = a_ring - audsrv_available();
+			a_queued = q > 0 ? q : 0;
 			a_when = clock(), a_played = a_sent - a_queued / 4;
 			audio_at = 1;
 		}
@@ -1028,7 +1034,7 @@ int main(void)
 			if (want != sel) want = sel, SignalSema(poster_sema);
 		}
 		s += (sel - s) * 0.22f;
-		if (fabsf(sel - s) < 0.002f) s = sel;
+		if (fabsf(sel - s) < 0.01f) s = sel; // a d of +0.001 would put the big poster in the row's right half (link.elf)
 		draw_browse(s);
 	}
 	return 0;
